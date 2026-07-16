@@ -131,13 +131,7 @@ function cleanProcessEnv() {
   return result
 }
 
-async function runOpenScience(input: {
-  agent: string
-  model: string
-  prompt: string
-  title: string
-  rawPath: string
-}) {
+async function runOpenScience(input: { agent: string; model: string; prompt: string; title: string; rawPath: string }) {
   const command = [
     "bun",
     "run",
@@ -270,7 +264,11 @@ function fixed(value: number, places = 2) {
   return value.toFixed(places)
 }
 
-function metricForArm(pair: PairResult, dimension: keyof Pick<JudgeResult, "technical" | "instruction" | "safety" | "readability">, arm: Arm) {
+function metricForArm(
+  pair: PairResult,
+  dimension: keyof Pick<JudgeResult, "technical" | "instruction" | "safety" | "readability">,
+  arm: Arm,
+) {
   const label = pair.labelMap.A === arm ? "A" : "B"
   return pair.judge[dimension][label]
 }
@@ -358,7 +356,11 @@ function buildSummary(input: {
   }
 
   const rows = [
-    ["Required literals", fixed(controlStats.requiredPassRate * 100, 1) + "%", fixed(treatmentStats.requiredPassRate * 100, 1) + "%"],
+    [
+      "Required literals",
+      fixed(controlStats.requiredPassRate * 100, 1) + "%",
+      fixed(treatmentStats.requiredPassRate * 100, 1) + "%",
+    ],
     ["Avg input tokens", fixed(controlStats.input, 0), fixed(treatmentStats.input, 0)],
     ["Avg output tokens", fixed(controlStats.output, 0), fixed(treatmentStats.output, 0)],
     ["Avg reasoning tokens", fixed(controlStats.reasoning, 0), fixed(treatmentStats.reasoning, 0)],
@@ -370,7 +372,8 @@ function buildSummary(input: {
     ["Judge readability", fixed(scores.control.readability), fixed(scores.treatment.readability)],
   ]
 
-  const markdown = `# Caveman Evaluation — ${verdict}\n\n` +
+  const markdown =
+    `# Caveman Evaluation — ${verdict}\n\n` +
     `- Model: \`${input.model}\`\n` +
     `- Judge: \`${input.judgeModel}\`\n` +
     `- Cases: ${summary.cases}; repeats: ${input.repeats}; paired runs: ${input.pairs.length}\n` +
@@ -382,7 +385,9 @@ function buildSummary(input: {
     `- Provider cost: ${fixed(costDelta, 1)}%\n` +
     `- Blind preference: control ${preferences.control}, Caveman ${preferences.treatment}, tie ${preferences.tie}\n\n` +
     `## Gates\n\n` +
-    Object.entries(gates).map(([name, pass]) => `- ${pass ? "PASS" : "FAIL"}: ${name}`).join("\n") +
+    Object.entries(gates)
+      .map(([name, pass]) => `- ${pass ? "PASS" : "FAIL"}: ${name}`)
+      .join("\n") +
     `\n\nA pass authorizes a larger pilot only. It does not authorize global Brain OS installation.\n`
 
   return { summary, markdown }
@@ -429,16 +434,7 @@ async function main() {
         : ({ A: "control", B: "treatment" } as const)
       const outputA = labelMap.A === "control" ? control.text : treatment.text
       const outputB = labelMap.B === "control" ? control.text : treatment.text
-      const judgePrompt = [
-        "ORIGINAL TASK",
-        test.prompt,
-        "",
-        "OUTPUT A",
-        outputA,
-        "",
-        "OUTPUT B",
-        outputB,
-      ].join("\n")
+      const judgePrompt = ["ORIGINAL TASK", test.prompt, "", "OUTPUT A", outputA, "", "OUTPUT B", outputB].join("\n")
 
       const judgeRun = await runOpenScience({
         agent: JUDGE_AGENT,
@@ -462,7 +458,9 @@ async function main() {
         preferredArm,
       }
       pairs.push(pair)
-      console.log(`${test.id} #${repeat}: control=${control.usage.output} treatment=${treatment.usage.output} preference=${preferredArm}`)
+      console.log(
+        `${test.id} #${repeat}: control=${control.usage.output} treatment=${treatment.usage.output} preference=${preferredArm}`,
+      )
     }
   }
 
