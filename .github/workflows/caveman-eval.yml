@@ -1,6 +1,10 @@
 name: Caveman evaluation
 
 on:
+  pull_request:
+    paths:
+      - ".github/workflows/caveman-eval.yml"
+      - "experiments/caveman-eval/**"
   workflow_dispatch:
     inputs:
       model:
@@ -33,7 +37,7 @@ permissions:
 jobs:
   contract-smoke:
     name: Contract smoke (${{ matrix.os }})
-    if: github.event_name == 'workflow_dispatch' || vars.CAVEMAN_EVAL_ENABLED == 'true'
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || vars.CAVEMAN_EVAL_ENABLED == 'true'
     strategy:
       fail-fast: false
       matrix:
