@@ -1,0 +1,112 @@
+name: Caveman evaluation
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Model under test, provider/model"
+        required: false
+        type: string
+      judge_model:
+        description: "Blind judge model, preferably different provider/model"
+        required: false
+        type: string
+      repeats:
+        description: "Paired repeats per case (1-10)"
+        required: false
+        default: "1"
+        type: string
+      case_limit:
+        description: "Optional number of cases for a cheap smoke run"
+        required: false
+        type: string
+  schedule:
+    - cron: "17 8 * * 1"
+
+concurrency:
+  group: caveman-eval-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  contract-smoke:
+    name: Contract smoke (${{ matrix.os }})
+    if: github.event_name == 'workflow_dispatch' || vars.CAVEMAN_EVAL_ENABLED == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Checkout pinned Caveman source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: JuliusBrussee/caveman
+          ref: 0d95a81d35a9f2d123a5e9430d1cfc43d55f1bb0
+          path: _external/caveman
+
+      - name: Verify pinned commit and skill blob
+        shell: bash
+        run: |
+          test "$(git -C _external/caveman rev-parse HEAD)" = "0d95a81d35a9f2d123a5e9430d1cfc43d55f1bb0"
+          test "$(git -C _external/caveman hash-object skills/caveman/SKILL.md)" = "adf8bc553f840d35c837c122c208a2f738a390ec"
+
+      - name: Unified installer dry-run
+        shell: bash
+        run: |
+          node _external/caveman/bin/install.js --list
+          node _external/caveman/bin/install.js --dry-run --minimal --non-interactive --only claude --only codex
+
+      - name: PowerShell shim parses and lists
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./_external/caveman/install.ps1 --list
+
+      - name: Shell shim parses and lists
+        if: runner.os == 'Linux'
+        shell: bash
+        run: bash _external/caveman/install.sh --list
+
+  behavior-eval:
+    name: Behavior and economics A/B
+    if: github.event_name == 'workflow_dispatch' || vars.CAVEMAN_EVAL_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Run paired blinded evaluation
+        run: bun experiments/caveman-eval/scripts/run.ts
+        env:
+          CAVEMAN_EVAL_MODEL: ${{ inputs.model || vars.CAVEMAN_EVAL_MODEL }}
+          CAVEMAN_JUDGE_MODEL: ${{ inputs.judge_model || vars.CAVEMAN_JUDGE_MODEL }}
+          CAVEMAN_EVAL_REPEATS: ${{ inputs.repeats || vars.CAVEMAN_EVAL_REPEATS || '1' }}
+          CAVEMAN_EVAL_CASE_LIMIT: ${{ inputs.case_limit || '12' }}
+          CAVEMAN_EVAL_SEED: "2026-07-16"
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+      - name: Add evaluation summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f experiments/caveman-eval/results/latest/summary.md ]; then
+            cat experiments/caveman-eval/results/latest/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload raw evidence and summary
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: caveman-eval-${{ github.run_id }}
+          path: experiments/caveman-eval/results/latest
+          if-no-files-found: warn
+          retention-days: 30
